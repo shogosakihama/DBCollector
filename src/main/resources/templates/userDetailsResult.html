@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Details Result</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>User Details</h1>
+    <table>
+        <tr>
+            <th>User System ID</th>
+            <th>User Name</th>
+            <th>IP Address</th>
+            <th>Custom Path</th>
+            <th>Option Username</th>
+            <th>Option Password</th>
+            <th>Formatted Path</th>
+            <th>Custom Path Enable Flag</th>
+            <th>Path Type</th>
+            
+        </tr>
+        <tr th:each="detail : ${userDetails}">
+            <td th:text="${detail.userSystemId}"></td>
+            <td th:text="${detail.userName}"></td>
+            <td th:text="${detail.ipAddress}"></td>
+            <td th:text="${detail.customPath}"></td>
+            <td th:text="${detail.optionUsername}"></td>
+            <td th:text="${detail.optionPassword}"></td>
+            <td th:text="${detail.formattedPath}"></td>
+            <td th:text="${detail.customPathEnableFlag}"></td>
+            <td th:text="${detail.pathType}"></td>
+        </tr>
+    </table>
+    <h2>Disk Space Information</h2>
+    <p>Total Space (GB): <span th:text="${totalSpace}"></span></p>
+    <p>Free Space (GB): <span th:text="${freeSpace}"></span></p>
+    <p>Usable Space (GB): <span th:text="${usableSpace}"></span></p>
+    <a href="/form">Back to form</a>
+</body>
+</html>
