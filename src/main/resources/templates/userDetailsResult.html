@@ -48,6 +48,7 @@
     <form action="/view-files" method="post">
         <label for="path">Path:</label>
         <input type="text" id="path" name="path">
+        <input type="hidden" id="userSystemId" name="userSystemId" th:value="${userDetails[0].userSystemId}">
         <button type="submit">Submit</button>
     </form>
 

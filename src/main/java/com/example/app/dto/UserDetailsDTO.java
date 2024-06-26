@@ -99,6 +99,22 @@ public class UserDetailsDTO {
         return "\\\\" + ipAddress + formattedPath;
     }
 
+    // 共有名を取得するメソッド
+    public String getShareName() {
+        String formattedPath = getFormattedPath();
+        System.out.println("Debug Formatted Path: " + formattedPath); // デバッグ情報
+        // フォーマットされたパスが \\ip_address\share_name\... であることを仮定
+        String[] parts = formattedPath.split("\\\\");
+        return parts.length > 3 ? parts[3] : "";
+    }
+
+    // フォルダ部分を取得するメソッド
+    public String getFolderName() {
+        String formattedPath = getFormattedPath();
+        String[] parts = formattedPath.split("\\\\");
+        return parts.length > 4 ? parts[4] : "";
+    }
+
     @Override
     public String toString() {
         return String.format("{userSystemId:%s, userName:%s, ipAddress:%s, customPath:%s, customPathEnableFlag:%d, pathType:%s, optionUsername:%s, optionPassword:%s}", userSystemId, userName, ipAddress, customPath, customPathEnableFlag, pathType, optionUsername, optionPassword);
