@@ -30,7 +30,6 @@
             <th>Formatted Path</th>
             <th>Custom Path Enable Flag</th>
             <th>Path Type</th>
-            
         </tr>
         <tr th:each="detail : ${userDetails}">
             <td th:text="${detail.userSystemId}"></td>
@@ -44,6 +43,19 @@
             <td th:text="${detail.pathType}"></td>
         </tr>
     </table>
+
+    <h2>Enter Path to View Files</h2>
+    <form action="/view-files" method="post">
+        <label for="path">Path:</label>
+        <input type="text" id="path" name="path">
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Files in the Path</h2>
+    <ul>
+        <li th:each="file : ${files}" th:text="${file}"></li>
+    </ul>
+
     <h2>Disk Space Information</h2>
     <p>Total Space (GB): <span th:text="${totalSpace}"></span></p>
     <p>Free Space (GB): <span th:text="${freeSpace}"></span></p>

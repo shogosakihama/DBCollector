@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 @Controller
@@ -40,6 +41,19 @@ public class UserController {
     public String getDiskSpace(Model model) {
         addDiskSpaceAttributes(model);
         return "diskSpace";
+    }
+
+    @PostMapping("/view-files")
+    public String viewFilesInPath(@RequestParam String path, Model model) {
+        File folder = new File(path);
+        List<String> files = new ArrayList<>();
+        if (folder.exists() && folder.isDirectory()) {
+            for (File file : folder.listFiles()) {
+                files.add(file.getName());
+            }
+        }
+        model.addAttribute("files", files);
+        return "userDetailsResult"; // userDetailsResult.htmlにリダイレクト
     }
 
     private void addDiskSpaceAttributes(Model model) {
