@@ -48,7 +48,7 @@
     <form action="/view-files" method="post">
         <label for="path">Path:</label>
         <input type="text" id="path" name="path">
-        <input type="hidden" id="userSystemId" name="userSystemId" th:value="${userDetails[0].userSystemId}">
+        <input type="hidden" id="userSystemId" name="userSystemId" th:value="${userDetails != null && !userDetails.isEmpty() ? userDetails[0].userSystemId : ''}">
         <button type="submit">Submit</button>
     </form>
 
@@ -56,6 +56,17 @@
     <ul>
         <li th:each="file : ${files}" th:text="${file}"></li>
     </ul>
+
+    <h2>Transfer Files</h2>
+    <form action="/transfer-files" method="post">
+        <label for="sourcePath">Source Path:</label>
+        <input type="text" id="sourcePath" name="sourcePath">
+        <br>
+        <label for="destinationPath">Destination Path:</label>
+        <input type="text" id="destinationPath" name="destinationPath">
+        <input type="hidden" id="userSystemId" name="userSystemId" th:value="${userDetails != null && !userDetails.isEmpty() ? userDetails[0].userSystemId : ''}">
+        <button type="submit">Transfer</button>
+    </form>
 
     <h2>Disk Space Information</h2>
     <p>Total Space (GB): <span th:text="${totalSpace}"></span></p>
