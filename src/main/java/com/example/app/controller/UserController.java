@@ -2,37 +2,42 @@ package com.example.app.controller;
 
 import com.example.app.dto.UserDetailsDTO;
 import com.example.app.repository.UserRepository;
-import com.hierynomus.msdtyp.AccessMask;
+import com.example.app.service.FileTransferTask;
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation;
-import com.hierynomus.mssmb2.SMBApiException;
 import com.hierynomus.smbj.SMBClient;
 import com.hierynomus.smbj.auth.AuthenticationContext;
 import com.hierynomus.smbj.connection.Connection;
 import com.hierynomus.smbj.session.Session;
 import com.hierynomus.smbj.share.DiskShare;
-import com.hierynomus.smbj.share.File;
+import com.hierynomus.smbj.common.SMBRuntimeException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import com.hierynomus.mssmb2.SMB2ShareAccess;
-import com.hierynomus.mssmb2.SMB2CreateDisposition;
 
+import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Controller
 public class UserController {
 
     private final UserRepository repository;
+    private final ExecutorService executorService;
+    private final String username = "developers";
+    private final String password = "developers";
 
     @Autowired
     public UserController(UserRepository repository) {
         this.repository = repository;
+        this.executorService = Executors.newFixedThreadPool(10); // 10スレッドのスレッドプールを作成
     }
 
     @GetMapping("/form")
@@ -46,12 +51,6 @@ public class UserController {
         model.addAttribute("userDetails", userDetails);
         return "userDetailsResult"; // userDetailsResult.htmlを表示
     }
-
-    // @GetMapping("/disk-space")
-    // public String getDiskSpace(Model model) {
-    //     addDiskSpaceAttributes(model);
-    //     return "diskSpace";
-    // }
 
     @PostMapping("/view-files")
     public String viewFilesInPath(@RequestParam String userSystemId, Model model) {
@@ -68,8 +67,6 @@ public class UserController {
         }
 
         UserDetailsDTO userDetail = userDetails.get(0);
-        String username = userDetail.getOptionUsername();
-        String password = userDetail.getOptionPassword();
         String shareName = userDetail.getShareName();
         String folderName = userDetail.getFolderName();
 
@@ -90,8 +87,14 @@ public class UserController {
                         files.add(fileName);
                     }
                 }
+            } catch (SMBRuntimeException e) {
+                System.err.println("SMB Error: " + e.getMessage());
+                model.addAttribute("message", "Error accessing shared folder: " + e.getMessage());
+                e.printStackTrace();
             }
         } catch (IOException e) {
+            System.err.println("IO Error: " + e.getMessage());
+            model.addAttribute("message", "Error accessing SMB client: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -103,15 +106,15 @@ public class UserController {
     @PostMapping("/transfer-files")
     public String transferFiles(@RequestParam String sourcePath, @RequestParam String destinationPath,
                                 @RequestParam String userSystemId, Model model) {
+        System.out.println("Starting file transfer from " + sourcePath + " to " + destinationPath + " for userSystemId: " + userSystemId);
         List<UserDetailsDTO> userDetails = repository.findUserDetailsByUserSystemId(userSystemId);
         if (userDetails.isEmpty()) {
             model.addAttribute("files", new ArrayList<>());
+            System.out.println("User details not found for userSystemId: " + userSystemId);
             return "userDetailsResult";
         }
 
         UserDetailsDTO userDetail = userDetails.get(0);
-        String username = userDetail.getOptionUsername();
-        String password = userDetail.getOptionPassword();
 
         String sourceIpAddress = extractIpAddress(sourcePath);
         String destinationIpAddress = extractIpAddress(destinationPath);
@@ -127,66 +130,11 @@ public class UserController {
         System.out.println("Source Relative Path: " + sourceRelativePath);
         System.out.println("Destination Relative Path: " + destinationRelativePath);
 
-        try (SMBClient client = new SMBClient()) {
-            try (Connection connection = client.connect(sourceIpAddress)) {
-                username = "developers";
-                password = "developers";
-                AuthenticationContext ac = new AuthenticationContext(username, password.toCharArray(), null);
-                Session session = connection.authenticate(ac);
-                DiskShare share = (DiskShare) session.connectShare(sourceShareName);
+        FileTransferTask task = new FileTransferTask(sourceIpAddress, destinationIpAddress, sourceShareName,
+                destinationShareName, sourceRelativePath, destinationRelativePath);
+        executorService.submit(task);
 
-                for (FileIdBothDirectoryInformation file : share.list(sourceRelativePath, "*")) {
-                    String fileName = file.getFileName();
-                    if (fileName.equals(".") || fileName.equals("..")) {
-                        continue; // .や..ディレクトリを除外
-                    }
-                    String filePath = sourceRelativePath + "\\" + fileName;
-                    System.out.println("Found file: " + filePath);
-
-                    try {
-                        try (File srcFile = share.openFile(filePath, EnumSet.of(AccessMask.GENERIC_READ), null,SMB2ShareAccess.ALL, SMB2CreateDisposition.FILE_OPEN, null);
-                             java.io.InputStream in = srcFile.getInputStream()) {
-
-                            long fileSize = srcFile.getFileInformation().getStandardInformation().getEndOfFile();
-                            System.out.println("File size: " + fileSize);
-
-                            try (Connection destConnection = client.connect(destinationIpAddress)) {
-                                Session destSession = destConnection.authenticate(ac);
-                                DiskShare destShare = (DiskShare) destSession.connectShare(destinationShareName);
-
-                                try (File destFile = destShare.openFile(destinationRelativePath + "\\" + fileName,
-                                        EnumSet.of(AccessMask.GENERIC_WRITE), null, SMB2ShareAccess.ALL, SMB2CreateDisposition.FILE_OVERWRITE_IF, null);
-                                     java.io.OutputStream out = destFile.getOutputStream()) {
-
-                                    byte[] buffer = new byte[4096];
-                                    int bytesRead;
-                                    long totalBytesRead = 0;
-                                    while ((bytesRead = in.read(buffer)) != -1) {
-                                        out.write(buffer, 0, bytesRead);
-                                        totalBytesRead += bytesRead;
-                                    }
-                                    System.out.println("Read " + totalBytesRead + " bytes from " + filePath);
-                                    System.out.println("Wrote " + totalBytesRead + " bytes to "
-                                            + destinationRelativePath + "\\" + fileName);
-                                }
-                            }
-                        }
-                    } catch (SMBApiException e) {
-                        System.out.println("Failed to open file: " + filePath + " due to " + e.getStatusCode());
-                        e.printStackTrace();
-                        model.addAttribute("message", "File transfer failed: Unable to open file " + fileName
-                                + " due to " + e.getStatusCode());
-                        return "userDetailsResult";
-                    }
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            model.addAttribute("message", "File transfer failed: " + e.getMessage());
-            return "userDetailsResult";
-        }
-
-        model.addAttribute("message", "File transfer successful");
+        model.addAttribute("message", "File transfer started in the background.");
         model.addAttribute("userDetails", userDetails);
         return "userDetailsResult";
     }
@@ -206,16 +154,18 @@ public class UserController {
         return path.startsWith(prefix) ? path.substring(prefix.length()) : path;
     }
 
-    // private void addDiskSpaceAttributes(Model model) {
-    //     File cDrive = new File("C:");
-
-    //     long totalSpace = cDrive.getTotalSpace();
-    //     long freeSpace = cDrive.getFreeSpace();
-    //     long usableSpace = cDrive.getUsableSpace();
-
-    //     model.addAttribute("totalSpace", String.format("%.2f", totalSpace / 1e9));
-    //     model.addAttribute("freeSpace", String.format("%.2f", freeSpace / 1e9));
-    //     model.addAttribute("usableSpace", String.format("%.2f", usableSpace / 1e9));
-    // }
-
+    @PreDestroy
+    public void shutdownExecutorService() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+                if (!executorService.awaitTermination(60, TimeUnit.SECONDS))
+                    System.err.println("ExecutorService did not terminate");
+            }
+        } catch (InterruptedException ie) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 }
