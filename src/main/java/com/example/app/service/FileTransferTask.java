@@ -3,6 +3,7 @@ package com.example.app.service;
 import com.hierynomus.msdtyp.AccessMask;
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation;
 import com.hierynomus.mssmb2.SMB2CreateDisposition;
+import com.hierynomus.mssmb2.SMB2CreateOptions;
 import com.hierynomus.mssmb2.SMB2ShareAccess;
 import com.hierynomus.smbj.SMBClient;
 import com.hierynomus.smbj.auth.AuthenticationContext;
@@ -10,39 +11,45 @@ import com.hierynomus.smbj.connection.Connection;
 import com.hierynomus.smbj.session.Session;
 import com.hierynomus.smbj.share.DiskShare;
 import com.hierynomus.smbj.share.File;
-import com.hierynomus.smbj.common.SMBRuntimeException;
 
 import java.io.IOException;
 import java.util.EnumSet;
-import java.util.concurrent.Callable;
 
-public class FileTransferTask implements Callable<String> {
+public class FileTransferTask implements Runnable {
     private String sourceIpAddress;
     private String destinationIpAddress;
     private String sourceShareName;
     private String destinationShareName;
     private String sourceRelativePath;
     private String destinationRelativePath;
-    private final String username = "developers";
-    private final String password = "developers";
+    private String sourceUsername;
+    private String sourcePassword;
+    private String destUsername;
+    private String destPassword;
 
     public FileTransferTask(String sourceIpAddress, String destinationIpAddress, String sourceShareName,
-                            String destinationShareName, String sourceRelativePath, String destinationRelativePath) {
+                            String destinationShareName, String sourceRelativePath, String destinationRelativePath,
+                            String sourceUsername, String sourcePassword, String destUsername, String destPassword) {
         this.sourceIpAddress = sourceIpAddress;
         this.destinationIpAddress = destinationIpAddress;
         this.sourceShareName = sourceShareName;
         this.destinationShareName = destinationShareName;
         this.sourceRelativePath = sourceRelativePath;
         this.destinationRelativePath = destinationRelativePath;
+        this.sourceUsername = sourceUsername;
+        this.sourcePassword = sourcePassword;
+        this.destUsername = destUsername;
+        this.destPassword = destPassword;
     }
 
     @Override
-    public String call() {
+    public void run() {
         try (SMBClient client = new SMBClient()) {
-            System.out.println("Connecting to source IP: " + sourceIpAddress);
+            // ソースサーバーへの接続
+            System.out.println("Connecting to source server: " + sourceIpAddress);
             try (Connection sourceConnection = client.connect(sourceIpAddress)) {
-                AuthenticationContext ac = new AuthenticationContext(username, password.toCharArray(), null);
-                Session sourceSession = sourceConnection.authenticate(ac);
+                AuthenticationContext sourceAc = new AuthenticationContext(sourceUsername, sourcePassword.toCharArray(), null);
+                Session sourceSession = sourceConnection.authenticate(sourceAc);
                 DiskShare sourceShare = (DiskShare) sourceSession.connectShare(sourceShareName);
 
                 String filePath = sourceRelativePath + "\\test1.log";
@@ -53,10 +60,15 @@ public class FileTransferTask implements Callable<String> {
                     long fileSize = srcFile.getFileInformation().getStandardInformation().getEndOfFile();
                     System.out.println("Source file size: " + fileSize);
 
-                    System.out.println("Connecting to destination IP: " + destinationIpAddress);
+                    // デスティネーションサーバーへの接続
+                    System.out.println("Connecting to destination server: " + destinationIpAddress);
                     try (Connection destConnection = client.connect(destinationIpAddress)) {
-                        Session destSession = destConnection.authenticate(ac);
+                        AuthenticationContext destAc = new AuthenticationContext(destUsername, destPassword.toCharArray(), null);
+                        System.out.println("destUsername: " + destUsername +"destPassword: " + destPassword);
+                        Session destSession = destConnection.authenticate(destAc);
+                        System.out.println("destSession: " + destSession);
                         DiskShare destShare = (DiskShare) destSession.connectShare(destinationShareName);
+                        System.out.println("destinationShareName: " + destinationShareName);
 
                         String destinationFilePath = destinationRelativePath + "\\test1.log";
                         System.out.println("Opening destination file: " + destinationFilePath);
@@ -72,17 +84,22 @@ public class FileTransferTask implements Callable<String> {
                             }
                             System.out.println("Read " + totalBytesRead + " bytes from " + filePath);
                             System.out.println("Wrote " + totalBytesRead + " bytes to " + destinationFilePath);
+                        } catch (IOException e) {
+                            System.err.println("Failed to open or write to destination file: " + e.getMessage());
+                            e.printStackTrace();
                         }
+                    } catch (IOException e) {
+                        System.err.println("Failed to connect or authenticate to destination server: " + e.getMessage());
+                        e.printStackTrace();
                     }
+                } catch (IOException e) {
+                    System.err.println("Failed to open or read from source file: " + e.getMessage());
+                    e.printStackTrace();
                 }
-            } catch (SMBRuntimeException e) {
+            } catch (IOException e) {
+                System.err.println("Failed to connect or authenticate to source server: " + e.getMessage());
                 e.printStackTrace();
-                return "File transfer failed due to SMB error: " + e.getMessage();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            return "File transfer failed due to IO error: " + e.getMessage();
-        }
-        return "File transfer successful";
+        } 
     }
 }
